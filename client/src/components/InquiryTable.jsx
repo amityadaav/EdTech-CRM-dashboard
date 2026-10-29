@@ -8,47 +8,63 @@ import {
   ChevronRight,
   LoaderCircle,
 } from "lucide-react";
-import './InquiryTable.css'
-const API_URL = "http://localhost:5000/api/inquiries";
+
+import "./InquiryTable.css";
+
+// Backend API configuration
+const API_URL = `${
+  import.meta.env.VITE_API_URL ||
+  "https://edtech-crm-dashboard-1.onrender.com/api"
+}`.replace(/\/+$/, "");
+
+const INQUIRY_URL = `${API_URL}/inquiries`;
 
 const STATUSES = ["New", "In Progress", "Resolved"];
+
 const CATEGORIES = [
   "Scholarship",
   "Concert",
   "Admission",
   "General Query",
 ];
+
 const USER_TYPES = ["Parent", "Student", "School"];
+
+const LIMIT = 10;
 
 export default function InquiryTable() {
   const [inquiries, setInquiries] = useState([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [userType, setUserType] = useState("");
+
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-
-  const limit = 10;
 
   const fetchInquiries = useCallback(async () => {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      setError("Please login again.");
+      setInquiries([]);
+      setTotal(0);
+      setTotalPages(1);
+      setError("Please login again. Authentication token not found.");
       return;
     }
 
     setLoading(true);
     setError("");
+    setNotice("");
 
     try {
-      const response = await axios.get(API_URL, {
+      const response = await axios.get(INQUIRY_URL, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -57,41 +73,62 @@ export default function InquiryTable() {
           category,
           userType,
           page,
-          limit,
+          limit: LIMIT,
         },
+        timeout: 60000,
       });
 
       const result = response.data;
 
-      // Supports common API response structures
-      const records = Array.isArray(result.data)
-        ? result.data
-        : Array.isArray(result.inquiries)
+      // Supports common response formats:
+      // { data: [] }
+      // { inquiries: [] }
+      // { results: [] }
+      // { data: { inquiries: [], total, totalPages } }
+
+      const nestedData = result?.data;
+
+      const records = Array.isArray(nestedData)
+        ? nestedData
+        : Array.isArray(nestedData?.inquiries)
+        ? nestedData.inquiries
+        : Array.isArray(result?.inquiries)
         ? result.inquiries
-        : Array.isArray(result.results)
+        : Array.isArray(result?.results)
         ? result.results
         : [];
 
-      setInquiries(records);
-      setTotal(Number(result.total ?? result.count ?? records.length));
+      const pagination =
+        nestedData && !Array.isArray(nestedData)
+          ? nestedData
+          : result;
 
-      setTotalPages(
-        Math.max(
-          1,
-          Number(
-            result.totalPages ??
-              Math.ceil(
-                Number(result.total ?? result.count ?? records.length) /
-                  limit
-              )
-          )
-        )
+      const totalCount = Number(
+        pagination?.total ??
+          pagination?.count ??
+          records.length
       );
+
+      const pages = Number(
+        pagination?.totalPages ??
+          Math.ceil(totalCount / LIMIT)
+      );
+
+      setInquiries(records);
+      setTotal(totalCount);
+      setTotalPages(Math.max(1, pages));
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          "Unable to load inquiries. Check your backend."
-      );
+      if (err.response?.status === 401) {
+        setError("Session expired or invalid token. Please login again.");
+      } else if (err.response?.status === 403) {
+        setError("You don't have permission to view inquiries.");
+      } else {
+        setError(
+          err.response?.data?.message ||
+            err.message ||
+            "Unable to load inquiries. Please check your backend."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -101,14 +138,21 @@ export default function InquiryTable() {
     fetchInquiries();
   }, [fetchInquiries]);
 
+  // Update search and filters
   const handleFilterChange = (setter, value) => {
     setter(value);
     setPage(1);
     setNotice("");
   };
 
+  // Update inquiry status
   const handleStatusChange = async (id, status) => {
     const token = localStorage.getItem("token");
+
+    if (!token) {
+      setError("Please login again.");
+      return;
+    }
 
     setUpdatingId(id);
     setError("");
@@ -116,37 +160,50 @@ export default function InquiryTable() {
 
     try {
       await axios.patch(
-        `${API_URL}/${id}/status`,
+        `${INQUIRY_URL}/${id}/status`,
         { status },
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          timeout: 60000,
         }
       );
 
-      setInquiries((prev) =>
-        prev.map((item) =>
-          item._id === id ? { ...item, status } : item
+      setInquiries((previous) =>
+        previous.map((item) =>
+          item._id === id
+            ? { ...item, status }
+            : item
         )
       );
 
       setNotice("Inquiry status updated successfully.");
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Status update failed."
-      );
+      if (err.response?.status === 401) {
+        setError("Session expired or invalid token. Please login again.");
+      } else if (err.response?.status === 403) {
+        setError("You don't have permission to update this inquiry.");
+      } else {
+        setError(
+          err.response?.data?.message ||
+            "Status update failed. Please try again."
+        );
+      }
     } finally {
       setUpdatingId(null);
     }
   };
 
+  // Format date
   const formatDate = (date) => {
     if (!date) return "—";
 
     const parsed = new Date(date);
 
-    if (Number.isNaN(parsed.getTime())) return "—";
+    if (Number.isNaN(parsed.getTime())) {
+      return "—";
+    }
 
     return parsed.toLocaleDateString("en-IN", {
       day: "2-digit",
@@ -157,10 +214,13 @@ export default function InquiryTable() {
 
   return (
     <section className="inquiry-section">
+      {/* Header */}
       <div className="inquiry-heading">
         <div>
           <h2>All Inquiries</h2>
-          <p>Manage and track student and parent inquiries.</p>
+          <p>
+            Manage and track student and parent inquiries.
+          </p>
         </div>
 
         <button
@@ -169,7 +229,10 @@ export default function InquiryTable() {
           onClick={fetchInquiries}
           disabled={loading}
         >
-          <RefreshCw size={16} />
+          <RefreshCw
+            size={16}
+            className={loading ? "spinner" : ""}
+          />
           Refresh
         </button>
       </div>
@@ -181,11 +244,12 @@ export default function InquiryTable() {
 
           <input
             type="search"
-            placeholder="Search name or phone..."
+            placeholder="Search name, email or phone..."
             value={search}
             onChange={(e) =>
               handleFilterChange(setSearch, e.target.value)
             }
+            aria-label="Search inquiries"
           />
         </div>
 
@@ -197,6 +261,7 @@ export default function InquiryTable() {
           aria-label="Filter by category"
         >
           <option value="">All Categories</option>
+
           {CATEGORIES.map((item) => (
             <option key={item} value={item}>
               {item}
@@ -212,6 +277,7 @@ export default function InquiryTable() {
           aria-label="Filter by user type"
         >
           <option value="">All User Types</option>
+
           {USER_TYPES.map((item) => (
             <option key={item} value={item}>
               {item}
@@ -220,14 +286,22 @@ export default function InquiryTable() {
         </select>
       </div>
 
+      {/* Error */}
       {error && (
-        <div className="alert alert-error" role="alert">
+        <div
+          className="alert alert-error"
+          role="alert"
+        >
           {error}
         </div>
       )}
 
+      {/* Success */}
       {notice && (
-        <div className="alert alert-success" role="status">
+        <div
+          className="alert alert-success"
+          role="status"
+        >
           {notice}
         </div>
       )}
@@ -250,77 +324,96 @@ export default function InquiryTable() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="table-message">
-                  <LoaderCircle className="spinner" size={22} />
+                <td colSpan={7} className="table-message">
+                  <LoaderCircle
+                    className="spinner"
+                    size={22}
+                  />
                   Loading inquiries...
                 </td>
               </tr>
             ) : inquiries.length === 0 ? (
               <tr>
-                <td colSpan="7" className="table-message">
+                <td colSpan={7} className="table-message">
                   No inquiries found.
                 </td>
               </tr>
             ) : (
-              inquiries.map((item) => (
-                <tr key={item._id}>
-                  <td>
-                    <div className="contact-cell">
-                      <strong>{item.name}</strong>
-                      <small>{item.email || "—"}</small>
-                    </div>
-                  </td>
+              inquiries.map((item) => {
+                const currentStatus = STATUSES.includes(item.status)
+                  ? item.status
+                  : "New";
 
-                  <td>{item.phone || "—"}</td>
-                  <td>{item.userType || "—"}</td>
-                  <td>{item.category || "—"}</td>
+                return (
+                  <tr key={item._id}>
+                    {/* Contact */}
+                    <td>
+                      <div className="contact-cell">
+                        <strong>{item.name || "—"}</strong>
+                        <small>{item.email || "—"}</small>
+                      </div>
+                    </td>
 
-                  <td>
-                    <div
-                      className="message-cell"
-                      title={item.message}
-                    >
-                      {item.message || "—"}
-                    </div>
-                  </td>
+                    {/* Phone */}
+                    <td>{item.phone || "—"}</td>
 
-                  <td>
-                    {formatDate(item.createdAt)}
-                  </td>
+                    {/* User Type */}
+                    <td>{item.userType || "—"}</td>
 
-                  <td>
-                    <select
-                      className={`status-select status-${(
-                        item.status || "New"
-                      )
-                        .toLowerCase()
-                        .replace(/\s+/g, "-")}`}
-                      value={item.status || "New"}
-                      disabled={updatingId === item._id}
-                      onChange={(e) =>
-                        handleStatusChange(
-                          item._id,
-                          e.target.value
-                        )
-                      }
-                      aria-label={`Update status for ${item.name}`}
-                    >
-                      {STATUSES.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
+                    {/* Category */}
+                    <td>{item.category || "—"}</td>
 
-                    {updatingId === item._id && (
-                      <LoaderCircle
-                        size={14}
-                        className="spinner"
-                      />
-                    )}
-                  </td>
-                </tr>
-              ))
+                    {/* Message */}
+                    <td>
+                      <div
+                        className="message-cell"
+                        title={item.message || ""}
+                      >
+                        {item.message || "—"}
+                      </div>
+                    </td>
+
+                    {/* Date */}
+                    <td>{formatDate(item.createdAt)}</td>
+
+                    {/* Status */}
+                    <td>
+                      <div className="status-cell">
+                        <select
+                          className={`status-select status-${currentStatus
+                            .toLowerCase()
+                            .replace(/\s+/g, "-")}`}
+                          value={currentStatus}
+                          disabled={updatingId === item._id}
+                          onChange={(e) =>
+                            handleStatusChange(
+                              item._id,
+                              e.target.value
+                            )
+                          }
+                          aria-label={`Update status for ${item.name || "inquiry"}`}
+                        >
+                          {STATUSES.map((status) => (
+                            <option
+                              key={status}
+                              value={status}
+                            >
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+
+                        {updatingId === item._id && (
+                          <LoaderCircle
+                            size={14}
+                            className="spinner"
+                          />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -336,7 +429,11 @@ export default function InquiryTable() {
           <button
             type="button"
             disabled={page <= 1 || loading}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() =>
+              setPage((previous) =>
+                Math.max(1, previous - 1)
+              )
+            }
             aria-label="Previous page"
           >
             <ChevronLeft size={18} />
@@ -350,7 +447,9 @@ export default function InquiryTable() {
             type="button"
             disabled={page >= totalPages || loading}
             onClick={() =>
-              setPage((p) => Math.min(totalPages, p + 1))
+              setPage((previous) =>
+                Math.min(totalPages, previous + 1)
+              )
             }
             aria-label="Next page"
           >

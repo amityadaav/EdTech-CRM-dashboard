@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import axios from "axios";
 import "./Login.css";
+
 import {
   GraduationCap,
   Mail,
@@ -14,8 +15,11 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+// Render Backend API
+const API_URL = (
+  import.meta.env.VITE_API_URL ||
+  "https://edtech-crm-dashboard-1.onrender.com/api"
+).replace(/\/+$/, "");
 
 export default function Login() {
   const navigate = useNavigate();
@@ -72,46 +76,65 @@ export default function Login() {
           headers: {
             "Content-Type": "application/json",
           },
-          timeout: 15000,
+          timeout: 60000,
         }
       );
 
       const result = response.data;
 
+      // Validate backend response
       if (
-        !result.success ||
-        !result.token ||
-        !result.admin ||
+        !result?.success ||
+        !result?.token ||
+        !result?.admin ||
         result.admin.role !== "admin"
       ) {
-        throw new Error("Invalid login response from server.");
+        throw new Error(
+          "Invalid login response or unauthorized admin account."
+        );
       }
 
-      // Store authentication data
+      // Save authentication data
       localStorage.setItem("token", result.token);
       localStorage.setItem(
         "admin",
         JSON.stringify(result.admin)
       );
 
-      // Navigate to admin dashboard
+      // Navigate to dashboard
       navigate("/dashboard", { replace: true });
     } catch (err) {
+      const status = err.response?.status;
+
       const message =
         err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Login failed. Please try again.";
+        err.response?.data?.error;
 
       if (err.code === "ECONNABORTED") {
         setError("Request timed out. Please try again.");
       } else if (!err.response && err.request) {
         setError(
-          "Cannot connect to server. Please check your backend."
+          "Cannot connect to server. Check backend status and CORS settings."
+        );
+      } else if (status === 401) {
+        setError(message || "Invalid email or password.");
+      } else if (status === 403) {
+        setError(message || "You are not authorized to login.");
+      } else if (status === 404) {
+        setError(
+          "Login API not found. Please check your backend route."
         );
       } else {
-        setError(message);
+        setError(
+          message || err.message || "Login failed. Please try again."
+        );
       }
+
+      // Helpful for development/debugging
+      console.error("Login error:", {
+        status,
+        message: err.response?.data || err.message,
+      });
     } finally {
       setLoading(false);
     }
@@ -239,6 +262,7 @@ export default function Login() {
                         ? "Hide password"
                         : "Show password"
                     }
+                    disabled={loading}
                   >
                     {showPassword ? (
                       <EyeOff size={19} />

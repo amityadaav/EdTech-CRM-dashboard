@@ -9,7 +9,6 @@ import {
   MessageSquareText,
   CheckCircle2,
   LoaderCircle,
-  ArrowRight,
   ShieldCheck,
   Sparkles,
   Users,
@@ -17,11 +16,15 @@ import {
   School,
   RotateCcw,
 } from "lucide-react";
+
 import "./InquiryForm.css";
 import { useNavigate } from "react-router-dom";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+// Render Backend API
+const API_URL = (
+  import.meta.env.VITE_API_URL ||
+  "https://edtech-crm-dashboard-1.onrender.com/api"
+).replace(/\/+$/, "");
 
 const INITIAL_FORM = {
   userType: "",
@@ -53,6 +56,7 @@ export default function InquiryForm() {
 
   const navigate = useNavigate();
 
+  // Handle form changes
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -65,8 +69,10 @@ export default function InquiryForm() {
     setSuccess(false);
   };
 
+  // Handle inquiry submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (loading) return;
 
     const payload = {
@@ -78,6 +84,7 @@ export default function InquiryForm() {
       message: formData.message.trim(),
     };
 
+    // Required field validation
     if (
       !payload.userType ||
       !payload.category ||
@@ -90,7 +97,16 @@ export default function InquiryForm() {
       return;
     }
 
+    // Phone validation
     if (!/^\+?[0-9\s()-]{7,20}$/.test(payload.phone)) {
+      setError("Please enter a valid phone number.");
+      return;
+    }
+
+    // Require at least 7 digits
+    const digits = payload.phone.replace(/\D/g, "");
+
+    if (digits.length < 7 || digits.length > 15) {
       setError("Please enter a valid phone number.");
       return;
     }
@@ -103,36 +119,72 @@ export default function InquiryForm() {
       const response = await axios.post(
         `${API_URL}/inquiries`,
         payload,
-        { timeout: 15000 }
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 60000,
+        }
       );
 
-      if (response.data?.success === false) {
+      const result = response.data;
+
+      // Handle explicit API failure
+      if (result?.success === false) {
         throw new Error(
-          response.data.message || "Inquiry submission failed."
+          result.message || "Inquiry submission failed."
         );
       }
 
+      // Show success only after successful HTTP response
       setSuccess(true);
-      setFormData(INITIAL_FORM);
+      setFormData({ ...INITIAL_FORM });
     } catch (err) {
+      const status = err.response?.status;
+      const serverMessage =
+        err.response?.data?.message ||
+        err.response?.data?.error;
+
       if (err.code === "ECONNABORTED") {
-        setError("Request timed out. Please try again.");
+        setError(
+          "Request timed out. Please check your inquiry status before retrying."
+        );
       } else if (!err.response && err.request) {
-        setError("Unable to connect to server. Please try again.");
+        setError(
+          "Unable to connect to server. Please check your backend and CORS settings."
+        );
+      } else if (status === 404) {
+        setError(
+          "Inquiry API not found. Please check your backend route."
+        );
+      } else if (status === 400) {
+        setError(
+          serverMessage || "Please check your submitted details."
+        );
+      } else if (status === 429) {
+        setError(
+          "Too many requests. Please wait and try again later."
+        );
       } else {
         setError(
-          err.response?.data?.message ||
-          err.message ||
-          "Something went wrong."
+          serverMessage ||
+            err.message ||
+            "Something went wrong. Please try again."
         );
       }
+
+      console.error("Inquiry submission error:", {
+        status,
+        message: serverMessage || err.message,
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  // Reset form
   const resetForm = () => {
-    setFormData(INITIAL_FORM);
+    setFormData({ ...INITIAL_FORM });
     setSuccess(false);
     setError("");
   };
@@ -153,10 +205,15 @@ export default function InquiryForm() {
               <small>Education · Connection · Growth</small>
             </span>
           </a>
-            <button type="button" className="admin-login-btn" onClick={() => navigate("/login")}>
-                <ShieldCheck size={17} />
-                <span>Admin Login</span>
-            </button>
+
+          <button
+            type="button"
+            className="admin-login-btn"
+            onClick={() => navigate("/login")}
+          >
+            <ShieldCheck size={17} />
+            <span>Admin Login</span>
+          </button>
         </header>
 
         <div className="iq-layout">
@@ -186,9 +243,12 @@ export default function InquiryForm() {
                   <span className="iq-benefit-icon">
                     <CheckCircle2 size={19} />
                   </span>
+
                   <div>
                     <strong>Simple inquiry process</strong>
-                    <p>Share your question in just a few steps.</p>
+                    <p>
+                      Share your question in just a few steps.
+                    </p>
                   </div>
                 </div>
 
@@ -196,9 +256,12 @@ export default function InquiryForm() {
                   <span className="iq-benefit-icon">
                     <MessageSquareText size={19} />
                   </span>
+
                   <div>
                     <strong>One place for your queries</strong>
-                    <p>Admission, scholarship and more.</p>
+                    <p>
+                      Admission, scholarship and more.
+                    </p>
                   </div>
                 </div>
 
@@ -206,9 +269,14 @@ export default function InquiryForm() {
                   <span className="iq-benefit-icon">
                     <ShieldCheck size={19} />
                   </span>
+
                   <div>
-                    <strong>Responsible information handling</strong>
-                    <p>We request only the details we need.</p>
+                    <strong>
+                      Responsible information handling
+                    </strong>
+                    <p>
+                      We request only the details we need.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -216,7 +284,9 @@ export default function InquiryForm() {
 
             <div className="iq-hero-bottom">
               <div className="iq-hero-line" />
-              <p>Helping you move forward, one question at a time.</p>
+              <p>
+                Helping you move forward, one question at a time.
+              </p>
             </div>
 
             <div className="iq-decoration iq-decoration-one" />
@@ -242,7 +312,10 @@ export default function InquiryForm() {
                   </div>
 
                   {error && (
-                    <div className="iq-alert iq-alert-error" role="alert">
+                    <div
+                      className="iq-alert iq-alert-error"
+                      role="alert"
+                    >
                       {error}
                     </div>
                   )}
@@ -255,36 +328,43 @@ export default function InquiryForm() {
                       </label>
 
                       <div className="iq-user-types">
-                        {USER_TYPES.map(({ label, icon: Icon }) => (
-                          <button
-                            key={label}
-                            type="button"
-                            disabled={loading}
-                            className={`iq-type-option ${
-                              formData.userType === label
-                                ? "selected"
-                                : ""
-                            }`}
-                            onClick={() => {
-                              setFormData((prev) => ({
-                                ...prev,
-                                userType: label,
-                              }));
-                              setError("");
-                              setSuccess(false);
-                            }}
-                            aria-pressed={formData.userType === label}
-                          >
-                            <Icon size={19} />
-                            <span>{label}</span>
-                          </button>
-                        ))}
+                        {USER_TYPES.map(
+                          ({ label, icon: Icon }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              disabled={loading}
+                              className={`iq-type-option ${
+                                formData.userType === label
+                                  ? "selected"
+                                  : ""
+                              }`}
+                              onClick={() => {
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  userType: label,
+                                }));
+
+                                setError("");
+                              }}
+                              aria-pressed={
+                                formData.userType === label
+                              }
+                            >
+                              <Icon size={19} />
+                              <span>{label}</span>
+                            </button>
+                          )
+                        )}
                       </div>
                     </div>
 
                     {/* Category */}
                     <div className="iq-field">
-                      <label htmlFor="category" className="iq-label">
+                      <label
+                        htmlFor="category"
+                        className="iq-label"
+                      >
                         Inquiry category <span>*</span>
                       </label>
 
@@ -299,7 +379,10 @@ export default function InquiryForm() {
                           required
                           disabled={loading}
                         >
-                          <option value="">Choose a category</option>
+                          <option value="">
+                            Choose a category
+                          </option>
+
                           {CATEGORIES.map((item) => (
                             <option key={item} value={item}>
                               {item}
@@ -311,7 +394,10 @@ export default function InquiryForm() {
 
                     {/* Name */}
                     <div className="iq-field">
-                      <label htmlFor="name" className="iq-label">
+                      <label
+                        htmlFor="name"
+                        className="iq-label"
+                      >
                         Full name <span>*</span>
                       </label>
 
@@ -335,7 +421,10 @@ export default function InquiryForm() {
 
                     {/* Email */}
                     <div className="iq-field">
-                      <label htmlFor="email" className="iq-label">
+                      <label
+                        htmlFor="email"
+                        className="iq-label"
+                      >
                         Email address <span>*</span>
                       </label>
 
@@ -359,7 +448,10 @@ export default function InquiryForm() {
 
                     {/* Phone */}
                     <div className="iq-field">
-                      <label htmlFor="phone" className="iq-label">
+                      <label
+                        htmlFor="phone"
+                        className="iq-label"
+                      >
                         Phone number <span>*</span>
                       </label>
 
@@ -384,7 +476,10 @@ export default function InquiryForm() {
                     {/* Message */}
                     <div className="iq-field">
                       <div className="iq-message-label">
-                        <label htmlFor="message" className="iq-label">
+                        <label
+                          htmlFor="message"
+                          className="iq-label"
+                        >
                           Your message <span>*</span>
                         </label>
 
@@ -412,6 +507,7 @@ export default function InquiryForm() {
                       </div>
                     </div>
 
+                    {/* Submit */}
                     <button
                       className="iq-submit"
                       type="submit"
@@ -426,9 +522,7 @@ export default function InquiryForm() {
                           Submitting your inquiry...
                         </>
                       ) : (
-                        <>
-                          Submit inquiry
-                        </>
+                        <>Submit inquiry</>
                       )}
                     </button>
 
@@ -442,6 +536,7 @@ export default function InquiryForm() {
                   </form>
                 </>
               ) : (
+                /* Success Screen */
                 <div className="iq-success-screen">
                   <div className="iq-success-icon">
                     <CheckCircle2 size={40} />
@@ -460,6 +555,7 @@ export default function InquiryForm() {
 
                   <div className="iq-success-details">
                     <CheckCircle2 size={20} />
+
                     <div>
                       <strong>Inquiry received</strong>
                       <small>
@@ -482,8 +578,12 @@ export default function InquiryForm() {
           </section>
         </div>
 
+        {/* Footer */}
         <footer className="iq-footer">
-          <span>© {new Date().getFullYear()} EdTech CRM</span>
+          <span>
+            © {new Date().getFullYear()} EdTech CRM
+          </span>
+
           <span>Built for better connections.</span>
         </footer>
       </div>
