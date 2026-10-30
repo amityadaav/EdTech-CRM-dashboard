@@ -103,6 +103,10 @@ Test using your actual API routes and request fields.
 - **Backend API:**https://edtech-crm-dashboard-1.onrender.com/
 - **GitHub Repository:**https://github.com/amityadaav/EdTech-CRM-dashboard/tree/main
 
+// Admin Login
+// Email Address : edtech@gmail.com
+// Password:EdTech12345#
+
 ##Deployment
 The frontend can be deployed using Vercel or Netlify, and the backend using Render. Configure environment variables and CORS settings before deployment.
 
