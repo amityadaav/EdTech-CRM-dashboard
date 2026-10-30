@@ -99,7 +99,7 @@ Test using your actual API routes and request fields.
 
 ##Live Demo
 
-- **Frontend:** https://edtech-crm-dashboard.netlify.app/inquiry
+- **Frontend:** https://ed-tech-crm-dashboard.vercel.app/
 - **Backend API:**https://edtech-crm-dashboard-1.onrender.com/
 - **GitHub Repository:**https://github.com/amityadaav/EdTech-CRM-dashboard/tree/main
 
